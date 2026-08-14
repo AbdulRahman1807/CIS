@@ -98,14 +98,17 @@ CIS/
 Nobody creates files outside this tree. If you need a new file, say so in chat
 first — one-line heads-up, not a debate.
 
-**Status as of this doc:** `audit_agent/allowlist.py`, `connector.py`,
-`collector.py`, and `fixtures/sample_captures.json` are **not yet created** —
-Person A already started on these independently (see `targets/` — those
-Dockerfiles are A's, already in the repo) and will add the rest as they go.
-Nobody else should create those files; the layout above just reserves their
-place so A's work slots in without a merge conflict. Everything else in the
-tree above (B and C's files, `ui/`) is already scaffolded and ready to build
-on.
+**Status as of this doc (post-merge):** Person A's part is done —
+`allowlist.py`, `connector.py`, `collector.py`, `fixtures/sample_captures.json`
+(generated from a real run, not hand-written), and `tests/test_collector.py`
+are all in the tree, tested end-to-end against live `cis-clean` /
+`cis-misconfigured` / `cis-broken` containers. See §3's footnotes ²³⁴ for
+three real bugs that live testing caught in the target Dockerfiles
+themselves (`sshd -T` needing root, `/etc/sudoers` being unreadable by
+`audituser`, and a silent no-op `sed` against Ubuntu 22.04's
+`PASS_MIN_LEN`) — worth reading before touching those files, the fixes are
+not obvious from the diff alone. B and C's files (including `ui/`) are
+scaffolded per the tree above and ready to build on.
 
 ---
 
