@@ -1,0 +1,160 @@
+{
+  "meta": {
+    "target": "cis-misconfigured-demo-container",
+    "timestamp": "2026-08-14T10:46:52+05:30",
+    "transport": "docker"
+  },
+  "summary": {
+    "pass": 3,
+    "fail": 6,
+    "unknown": 1
+  },
+  "findings": [
+    {
+      "rule_id": "CIS-5.2.10",
+      "title": "SSH root login disabled",
+      "command": "sshd -T",
+      "status": "FAIL",
+      "evidence": "permitrootlogin yes",
+      "severity_hint": "high"
+    },
+    {
+      "rule_id": "CIS-5.2.11",
+      "title": "SSH password auth disabled",
+      "command": "sshd -T",
+      "status": "FAIL",
+      "evidence": "passwordauthentication yes",
+      "severity_hint": "high"
+    },
+    {
+      "rule_id": "CIS-5.3.1",
+      "title": "Minimum password length \u226514",
+      "command": "cat /etc/login.defs",
+      "status": "FAIL",
+      "evidence": "PASS_MIN_LEN 5",
+      "severity_hint": "medium"
+    },
+    {
+      "rule_id": "CIS-6.1.2",
+      "title": "/etc/passwd ownership/perms",
+      "command": "stat -c %U:%G %a /etc/passwd",
+      "status": "PASS",
+      "evidence": "root:root 644",
+      "severity_hint": "medium"
+    },
+    {
+      "rule_id": "CIS-6.1.3",
+      "title": "/etc/shadow ownership/perms",
+      "command": "stat -c %U:%G %a /etc/shadow",
+      "status": "PASS",
+      "evidence": "root:shadow 640",
+      "severity_hint": "high"
+    },
+    {
+      "rule_id": "CIS-6.1.10",
+      "title": "No world-writable files in /etc, /usr/bin, /usr/sbin",
+      "command": "find /etc /usr/bin /usr/sbin -xdev -type f -perm -0002",
+      "status": "FAIL",
+      "evidence": "/etc/writable_file_planted\n/usr/bin/some_writable_file",
+      "severity_hint": "medium"
+    },
+    {
+      "rule_id": "CIS-3.5.1",
+      "title": "Firewall active",
+      "command": "iptables -L INPUT -n",
+      "status": "UNKNOWN",
+      "evidence": "iptables: executable file not found",
+      "severity_hint": "high"
+    },
+    {
+      "rule_id": "CIS-2.2.4",
+      "title": "Automatic security updates enabled",
+      "command": "cat /etc/apt/apt.conf.d/20auto-upgrades",
+      "status": "FAIL",
+      "evidence": "cat: /etc/apt/apt.conf.d/20auto-upgrades: No such file or directory",
+      "severity_hint": "medium"
+    },
+    {
+      "rule_id": "CIS-5.4.1",
+      "title": "No accounts with empty passwords",
+      "command": "awk -F: ($2==\"\"){print $1} /etc/shadow",
+      "status": "PASS",
+      "evidence": "No accounts with empty passwords found",
+      "severity_hint": "critical"
+    },
+    {
+      "rule_id": "CIS-5.2.9",
+      "title": "No blanket NOPASSWD:ALL in sudoers",
+      "command": "grep -r NOPASSWD /etc/sudoers /etc/sudoers.d",
+      "status": "FAIL",
+      "evidence": "/etc/sudoers:ALL ALL=(ALL) NOPASSWD:ALL",
+      "severity_hint": "high"
+    }
+  ],
+  "fix_list": [
+    {
+      "priority": 1,
+      "rule_id": "CIS-5.2.10",
+      "category": "SSH hardening",
+      "finding": "Root login over SSH is permitted (permitrootlogin yes).",
+      "why_it_matters": "A leaked or brute-forced root credential grants full remote access with no separate privilege step.",
+      "fix_command": "sudo sed -i 's/^PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && sudo systemctl reload sshd",
+      "evidence_ref": "CIS-5.2.10"
+    },
+    {
+      "priority": 2,
+      "rule_id": "CIS-5.2.11",
+      "category": "SSH hardening",
+      "finding": "Password authentication is enabled (passwordauthentication yes).",
+      "why_it_matters": "Password login exposes the SSH service to automated dictionary and brute-force attacks.",
+      "fix_command": "sudo sed -i 's/^PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && sudo systemctl reload sshd",
+      "evidence_ref": "CIS-5.2.11"
+    },
+    {
+      "priority": 3,
+      "rule_id": "CIS-5.2.9",
+      "category": "Sudo configuration",
+      "finding": "Blanket NOPASSWD wildcard found in sudoers.",
+      "why_it_matters": "Allows execution of administrative commands as root without authentication, permitting easy privilege escalation.",
+      "fix_command": "sudo sed -i '/NOPASSWD/d' /etc/sudoers",
+      "evidence_ref": "CIS-5.2.9"
+    },
+    {
+      "priority": 4,
+      "rule_id": "CIS-5.3.1",
+      "category": "Password policy",
+      "finding": "Minimum password length is 5 (minimum is 14).",
+      "why_it_matters": "Short passwords can be cracked in seconds using modern offline attack techniques.",
+      "fix_command": "sudo sed -i 's/^PASS_MIN_LEN.*/PASS_MIN_LEN 14/' /etc/login.defs",
+      "evidence_ref": "CIS-5.3.1"
+    },
+    {
+      "priority": 5,
+      "rule_id": "CIS-2.2.4",
+      "category": "Updates",
+      "finding": "Automatic security upgrades are not configured.",
+      "why_it_matters": "Unpatched vulnerabilities are the primary entry point for automated exploits.",
+      "fix_command": "echo 'APT::Periodic::Update-Package-Lists \"1\";\\nAPT::Periodic::Unattended-Upgrade \"1\";' | sudo tee /etc/apt/apt.conf.d/20auto-upgrades",
+      "evidence_ref": "CIS-2.2.4"
+    },
+    {
+      "priority": 6,
+      "rule_id": "CIS-6.1.10",
+      "category": "Permissions",
+      "finding": "Planted world-writable file found under /etc.",
+      "why_it_matters": "Allows any unprivileged user to overwrite critical configuration files and compromise the system.",
+      "fix_command": "sudo chmod o-w /etc/writable_file_planted /usr/bin/some_writable_file",
+      "evidence_ref": "CIS-6.1.10"
+    }
+  ],
+  "unknowns": [
+    {
+      "rule_id": "CIS-3.5.1",
+      "title": "Firewall active",
+      "command": "iptables -L INPUT -n",
+      "status": "UNKNOWN",
+      "evidence": "iptables: executable file not found",
+      "severity_hint": "high"
+    }
+  ]
+}
