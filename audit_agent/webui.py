@@ -63,6 +63,49 @@ class AuditReportHandler(http.server.BaseHTTPRequestHandler):
             output_html = html_template.replace("/* REPORT_JSON_DATA */", f"window.AUDIT_REPORT = {json_str};")
             
             self.wfile.write(output_html.encode("utf-8"))
+        elif self.path.startswith("/api/scan"):
+            import urllib.parse
+            import subprocess
+            
+            parsed_url = urllib.parse.urlparse(self.path)
+            params = urllib.parse.parse_qs(parsed_url.query)
+            target = params.get("target", [""])[0]
+            
+            if not target:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Missing target parameter"}).encode("utf-8"))
+                return
+                
+            try:
+                proc = subprocess.run(
+                    [sys.executable, "-m", "audit_agent.cli", "--target", target, "--report-json", REPORT_FILE_PATH],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                if proc.returncode == 0:
+                    report_data = {}
+                    if os.path.exists(REPORT_FILE_PATH):
+                        with open(REPORT_FILE_PATH, "r", encoding="utf-8") as f:
+                            report_data = json.load(f)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"status": "success", "report": report_data}).encode("utf-8"))
+                else:
+                    self.send_response(500)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        "error": proc.stderr.strip() or proc.stdout.strip() or f"Scan script returned non-zero code {proc.returncode}"
+                    }).encode("utf-8"))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": f"Exception starting scan: {str(e)}"}).encode("utf-8"))
         elif self.path in ("/api/report", "/report.json"):
             # Optional api endpoint for convenience
             self.send_response(200)

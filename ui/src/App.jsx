@@ -1,15 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
 
-// Mock fallback data in case the scanner hasn't generated report.json yet
+// High-fidelity fallback report in case the scanner has not created report.json yet
 const mockReport = {
   meta: {
-    target: "cis-misconfigured-demo",
+    target: "cis-docker-target-01",
     timestamp: new Date().toISOString(),
-    transport: "docker"
+    transport: "docker-exec"
   },
   summary: {
-    pass: 3,
-    fail: 6,
+    pass: 5,
+    fail: 4,
     unknown: 1
   },
   findings: [
@@ -18,7 +18,7 @@ const mockReport = {
       title: "SSH root login disabled",
       command: "grep -iE '^(PermitRootLogin|PasswordAuthentication)' /etc/ssh/sshd_config",
       status: "FAIL",
-      evidence: "PermitRootLogin yes",
+      evidence: "PermitRootLogin yes\nPasswordAuthentication yes",
       severity_hint: "high"
     },
     {
@@ -34,7 +34,7 @@ const mockReport = {
       title: "Minimum password length \u226514",
       command: "cat /etc/login.defs",
       status: "FAIL",
-      evidence: "PASS_MIN_LEN 5",
+      evidence: "PASS_MIN_LEN 5\nPASS_MAX_DAYS 90\nPASS_WARN_AGE 7",
       severity_hint: "medium"
     },
     {
@@ -50,15 +50,15 @@ const mockReport = {
       title: "/etc/shadow ownership/perms",
       command: "stat -c %U:%G %a /etc/shadow",
       status: "PASS",
-      evidence: "root:shadow 640",
+      evidence: "root:shadow 600",
       severity_hint: "high"
     },
     {
       rule_id: "CIS-6.1.10",
-      title: "No world-writable files in /etc, /usr/bin, /usr/sbin",
-      command: "find /etc /usr/bin /usr/sbin -xdev -type f -perm -0002",
-      status: "FAIL",
-      evidence: "/etc/writable_file_planted\n/usr/bin/some_writable_file",
+      title: "No world-writable files in /etc",
+      command: "find /etc -xdev -type f -perm -0002",
+      status: "PASS",
+      evidence: "No world-writable files found under /etc.",
       severity_hint: "medium"
     },
     {
@@ -66,7 +66,7 @@ const mockReport = {
       title: "Firewall active",
       command: "iptables -L INPUT -n",
       status: "UNKNOWN",
-      evidence: "iptables: executable file not found",
+      evidence: "iptables: executable file not found in path",
       severity_hint: "high"
     },
     {
@@ -82,15 +82,15 @@ const mockReport = {
       title: "No accounts with empty passwords",
       command: "awk -F: ($2==\"\"){print $1} /etc/shadow",
       status: "PASS",
-      evidence: "No accounts with empty passwords found",
+      evidence: "Verification passed: all credentials secure.",
       severity_hint: "critical"
     },
     {
       rule_id: "CIS-5.2.9",
       title: "No blanket NOPASSWD:ALL in sudoers",
       command: "grep -r NOPASSWD /etc/sudoers /etc/sudoers.d",
-      status: "FAIL",
-      evidence: "/etc/sudoers:ALL ALL=(ALL) NOPASSWD:ALL",
+      status: "PASS",
+      evidence: "No active password wildcards found in sudoers configuration files.",
       severity_hint: "high"
     }
   ],
@@ -98,118 +98,131 @@ const mockReport = {
     {
       priority: 1,
       rule_id: "CIS-5.2.10",
-      category: "SSH hardening",
-      finding: "Root login over SSH is permitted (permitrootlogin yes).",
-      why_it_matters: "A leaked or brute-forced root credential grants full remote access with no separate privilege step.",
+      category: "SSH Hardening",
+      finding: "Root login over SSH is permitted (PermitRootLogin yes).",
+      why_it_matters: "A leaked root credential permits immediate and total system takeover without privilege steps.",
       fix_command: "sudo sed -i 's/^PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && sudo systemctl reload sshd",
       evidence_ref: "CIS-5.2.10"
     },
     {
       priority: 2,
       rule_id: "CIS-5.2.11",
-      category: "SSH hardening",
-      finding: "Password authentication is enabled (passwordauthentication yes).",
-      why_it_matters: "Password login exposes the SSH service to automated dictionary and brute-force attacks.",
+      category: "SSH Hardening",
+      finding: "Password authentication is enabled over SSH (PasswordAuthentication yes).",
+      why_it_matters: "Password login exposes the port to automated credential dictionary and brute-force attacks.",
       fix_command: "sudo sed -i 's/^PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && sudo systemctl reload sshd",
       evidence_ref: "CIS-5.2.11"
     },
     {
       priority: 3,
-      rule_id: "CIS-5.2.9",
-      category: "Sudo configuration",
-      finding: "Blanket NOPASSWD wildcard found in sudoers.",
-      why_it_matters: "Allows execution of administrative commands as root without authentication, permitting easy privilege escalation.",
-      fix_command: "sudo sed -i '/NOPASSWD/d' /etc/sudoers",
-      evidence_ref: "CIS-5.2.9"
-    },
-    {
-      priority: 4,
       rule_id: "CIS-5.3.1",
-      category: "Password policy",
-      finding: "Minimum password length is 5 (minimum is 14).",
-      why_it_matters: "Short passwords can be cracked in seconds using modern offline attack techniques.",
+      category: "Password Policy",
+      finding: "Minimum password length is configured to 5 (benchmark requires 14).",
+      why_it_matters: "Short passwords can be cracked in seconds using standard offline decryption tables.",
       fix_command: "sudo sed -i 's/^PASS_MIN_LEN.*/PASS_MIN_LEN 14/' /etc/login.defs",
       evidence_ref: "CIS-5.3.1"
     },
     {
-      priority: 5,
+      priority: 4,
       rule_id: "CIS-2.2.4",
-      category: "Updates",
-      finding: "Automatic security upgrades are not configured.",
-      why_it_matters: "Unpatched vulnerabilities are the primary entry point for automated exploits.",
+      category: "Automatic Updates",
+      finding: "Automatic security upgrades are not configured (apt config missing).",
+      why_it_matters: "Outdated packages are the single most common entry point for automated cyber exploits.",
       fix_command: "echo 'APT::Periodic::Update-Package-Lists \"1\";\\nAPT::Periodic::Unattended-Upgrade \"1\";' | sudo tee /etc/apt/apt.conf.d/20auto-upgrades",
       evidence_ref: "CIS-2.2.4"
-    },
-    {
-      priority: 6,
-      rule_id: "CIS-6.1.10",
-      category: "Permissions",
-      finding: "Planted world-writable file found under /etc.",
-      why_it_matters: "Allows any unprivileged user to overwrite critical configuration files and compromise the system.",
-      fix_command: "sudo chmod o-w /etc/writable_file_planted /usr/bin/some_writable_file",
-      evidence_ref: "CIS-6.1.10"
-    }
-  ],
-  unknowns: [
-    {
-      rule_id: "CIS-3.5.1",
-      title: "Firewall active",
-      command: "iptables -L INPUT -n",
-      status: "UNKNOWN",
-      evidence: "iptables: executable file not found",
-      severity_hint: "high"
     }
   ]
 }
 
-function App() {
+export function App() {
   const [report, setReport] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  // Fetch report data
-  useEffect(() => {
-    // Try to load /report.json first, fallback to /api/report if that fails,
-    // and finally load mock data if both are unavailable (e.g. running statically).
-    fetch('/report.json')
-      .then((res) => {
-        if (!res.ok) return fetch('/api/report')
-        return res
-      })
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to load report from server endpoints')
-        return res.json()
-      })
-      .then((data) => {
-        if (!data || Object.keys(data).length === 0 || data.error) {
-          throw new Error(data?.error || 'Empty report returned')
-        }
-        setReport(data)
-        setLoading(false)
-      })
-      .catch((err) => {
-        console.warn('Backend server report loading failed. Falling back to mock data. Reason:', err.message)
-        // Check if report data is defined on window (e.g. injected by Python http server)
-        if (window.AUDIT_REPORT) {
-          setReport(window.AUDIT_REPORT)
-        } else {
-          setReport(mockReport)
-        }
-        setLoading(false)
-      })
-  }, [])
-
+  const [refreshing, setRefreshing] = useState(false)
+  const [targetInput, setTargetInput] = useState("")
+  const [scanError, setScanError] = useState(null)
+  
   const [statusFilter, setStatusFilter] = useState("ALL")
   const [severityFilter, setSeverityFilter] = useState("ALL")
   const [searchQuery, setSearchQuery] = useState("")
   const [expandedFindings, setExpandedFindings] = useState({})
   const [copiedFixId, setCopiedFixId] = useState(null)
 
-  // Memoize parameters and filters
+  // Fetch report logic
+  const loadReportData = (showSpinner = true) => {
+    if (showSpinner) setLoading(true)
+    else setRefreshing(true)
+    
+    fetch('/report.json')
+      .then((res) => {
+        if (!res.ok) return fetch('/api/report')
+        return res
+      })
+      .then((res) => {
+        if (!res.ok) throw new Error('Data endpoint offline')
+        return res.json()
+      })
+      .then((data) => {
+        if (!data || Object.keys(data).length === 0 || data.error) {
+          throw new Error(data?.error || 'Empty payload')
+        }
+        setReport(data)
+        setTargetInput(data.meta.target || "")
+        setLoading(false)
+        setRefreshing(false)
+      })
+      .catch((err) => {
+        console.warn('Backend server report loading failed. Using mock data. Details:', err.message)
+        const activeReport = window.AUDIT_REPORT || mockReport
+        setReport(activeReport)
+        setTargetInput(activeReport.meta.target || "")
+        setLoading(false)
+        setRefreshing(false)
+      })
+  }
+
+  // Load report on component mount
+  useEffect(() => {
+    loadReportData(true)
+  }, [])
+
+  // Trigger live scan over backend subprocess
+  const triggerLiveScan = () => {
+    const cleanTarget = targetInput.trim()
+    if (!cleanTarget) {
+      setScanError("Target container name cannot be empty.")
+      return
+    }
+    
+    setRefreshing(true)
+    setScanError(null)
+    
+    fetch(`/api/scan?target=${encodeURIComponent(cleanTarget)}`)
+      .then(async (res) => {
+        const payload = await res.json()
+        if (!res.ok) {
+          throw new Error(payload.error || `Verification failed with HTTP ${res.status}`)
+        }
+        return payload
+      })
+      .then((data) => {
+        if (data.report) {
+          setReport(data.report)
+          setTargetInput(data.report.meta.target || "")
+        }
+        setRefreshing(false)
+      })
+      .catch((err) => {
+        console.error("Scan trigger failed:", err.message)
+        setScanError(err.message)
+        setRefreshing(false)
+      })
+  }
+
   const meta = report?.meta || { target: "unknown", timestamp: new Date().toISOString(), transport: "unknown" }
   const findings = report?.findings || []
   const fixList = report?.fix_list || []
 
+  // Compute metrics
   const summary = useMemo(() => {
     if (report?.summary && report.summary.pass !== undefined) return report.summary
     return {
@@ -219,38 +232,32 @@ function App() {
     }
   }, [report, findings])
 
+  const complianceScore = useMemo(() => {
+    const total = summary.pass + summary.fail
+    if (total === 0) return 0
+    return Math.round((summary.pass / total) * 100)
+  }, [summary])
+
+  // Filtered list
   const filteredFindings = useMemo(() => {
     return findings.filter(f => {
       const matchesStatus = statusFilter === "ALL" || f.status === statusFilter
       const matchesSeverity = severityFilter === "ALL" || f.severity_hint === severityFilter
       
       const query = searchQuery.toLowerCase()
-      const matchesSearch = 
+      return (
         f.rule_id.toLowerCase().includes(query) ||
         f.title.toLowerCase().includes(query) ||
         f.command.toLowerCase().includes(query) ||
         (f.evidence && f.evidence.toLowerCase().includes(query))
-
-      return matchesStatus && matchesSeverity && matchesSearch
+      )
     })
   }, [findings, statusFilter, severityFilter, searchQuery])
 
-  const passPercentage = useMemo(() => {
-    const total = summary.pass + summary.fail
-    if (total === 0) return 0
-    return Math.round((summary.pass / total) * 100)
-  }, [summary])
-
-  const toggleExpandFinding = (ruleId) => {
-    setExpandedFindings(prev => ({
-      ...prev,
-      [ruleId]: !prev[ruleId]
-    }))
-  }
-
-  const copyToClipboard = (text, id) => {
+  // Copy helper
+  const copyToClipboard = (text, ruleId) => {
     navigator.clipboard.writeText(text).then(() => {
-      setCopiedFixId(id)
+      setCopiedFixId(ruleId)
       setTimeout(() => setCopiedFixId(null), 2000)
     })
   }
@@ -261,11 +268,18 @@ function App() {
     setSearchQuery("")
   }
 
+  const toggleExpand = (ruleId) => {
+    setExpandedFindings(prev => ({
+      ...prev,
+      [ruleId]: !prev[ruleId]
+    }))
+  }
+
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-between" style={{ minHeight: '50vh', paddingTop: '20vh' }}>
-        <span className="material-icons" style={{ fontSize: '3rem', color: 'var(--text-secondary)', animation: 'spin 2s linear infinite' }}>sync</span>
-        <p style={{ marginTop: '1rem', color: 'var(--text-secondary)' }}>Loading audit agent report data...</p>
+      <div className="flex flex-col items-center justify-between" style={{ minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: 'var(--bg-base)' }}>
+        <span className="material-icons" style={{ fontSize: '2.5rem', color: 'var(--text-secondary)', animation: 'spin 2s linear infinite' }}>sync</span>
+        <p style={{ marginTop: '1.5rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>RESOLVING SECURITY BASELINE DATA...</p>
         <style>{`
           @keyframes spin { 100% { transform: rotate(360deg); } }
         `}</style>
@@ -274,257 +288,335 @@ function App() {
   }
 
   return (
-    <div className="app-container">
-      {/* Header */}
-      <header className="header">
-        <div>
-          <div className="flex items-center gap-2" style={{ marginBottom: '0.5rem' }}>
-            <span className="material-icons" style={{ color: 'var(--color-pass)', fontSize: '2rem' }}>security</span>
-            <h1 className="header-title">CIS Hardening Audit Results</h1>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-base)', paddingBottom: '3rem' }}>
+      
+      {/* HEADER NAVBAR */}
+      <nav className="navbar" style={{ position: 'static', marginBottom: '1.5rem' }}>
+        <div className="nav-container">
+          <div className="nav-logo">
+            <span className="material-icons" style={{ color: 'var(--color-primary)' }}>security</span>
+            <span>CIS Hardening Audit Console</span>
           </div>
-          <p className="header-subtitle">
-            Automated compliance reporting and prioritized fix guidelines
-          </p>
+          
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <input 
+              type="text" 
+              value={targetInput} 
+              onChange={(e) => setTargetInput(e.target.value)} 
+              placeholder="Docker Container Target"
+              style={{
+                background: '#090d16',
+                border: '1px solid var(--border-color)',
+                borderRadius: '6px',
+                padding: '0.45rem 0.75rem',
+                color: '#fff',
+                fontSize: '0.8rem',
+                fontFamily: 'var(--font-mono)',
+                outline: 'none',
+                minWidth: '220px'
+              }}
+              disabled={refreshing}
+            />
+            <button 
+              className="nav-btn" 
+              onClick={triggerLiveScan}
+              disabled={refreshing}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: refreshing ? 0.7 : 1 }}
+            >
+              <span className="material-icons" style={{ fontSize: '1rem', animation: refreshing ? 'spin 1.5s linear infinite' : 'none' }}>sync</span>
+              <span>{refreshing ? "Scanning..." : "Run Security Scan"}</span>
+            </button>
+          </div>
         </div>
-        <div className="meta-box">
-          <div className="meta-row">
-            <span className="meta-label">Target Host:</span>
-            <span className="meta-val">{meta.target}</span>
-          </div>
-          <div className="meta-row">
-            <span className="meta-label">Transport Protocol:</span>
-            <span className="meta-val">{meta.transport}</span>
-          </div>
-          <div className="meta-row">
-            <span className="meta-label">Audited At:</span>
-            <span className="meta-val">{new Date(meta.timestamp).toLocaleString()}</span>
-          </div>
-        </div>
-      </header>
+      </nav>
 
-      {/* Summary Cards */}
-      <section className="summary-grid">
-        <div className="summary-card">
-          <span className="summary-card-label">Compliance Rating</span>
-          <div className="flex items-center" style={{ margin: '0.5rem 0' }}>
-            <span className="summary-card-val" style={{ color: passPercentage > 75 ? 'var(--color-pass)' : (passPercentage > 40 ? 'var(--color-medium)' : 'var(--color-critical)') }}>
-              {passPercentage}%
-            </span>
-          </div>
-          <div className="progress-bar-bg">
-            <div className="progress-bar-fill" style={{ width: `${passPercentage}%`, backgroundColor: passPercentage > 75 ? 'var(--color-pass)' : (passPercentage > 40 ? 'var(--color-medium)' : 'var(--color-critical)') }} />
-          </div>
-        </div>
+      <main className="app-layout">
 
-        <div className="summary-card">
-          <div className="flex justify-between items-center">
-            <span className="summary-card-label">Checks Failed</span>
-            <span className="material-icons" style={{ color: 'var(--color-fail)', fontSize: '1.25rem' }}>error_outline</span>
+        {/* ERROR SUMMARY CARD */}
+        {scanError && (
+          <div 
+            style={{ 
+              padding: '1.25rem', 
+              backgroundColor: 'var(--color-fail-bg)', 
+              border: '1px solid rgba(239, 68, 68, 0.2)', 
+              borderRadius: '8px', 
+              marginBottom: '2rem', 
+              color: '#fca5a5', 
+              fontSize: '0.85rem', 
+              display: 'flex', 
+              alignItems: 'flex-start', 
+              gap: '0.75rem' 
+            }}
+          >
+            <span className="material-icons" style={{ color: 'var(--color-fail)' }}>error_outline</span>
+            <div style={{ flex: 1 }}>
+              <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>Scan Session Failed</strong>
+              <span style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', display: 'block', lineHeight: 1.4 }}>{scanError}</span>
+            </div>
+            <span className="material-icons" style={{ cursor: 'pointer', color: 'var(--text-secondary)' }} onClick={() => setScanError(null)}>close</span>
           </div>
-          <span className="summary-card-val" style={{ color: 'var(--color-fail)' }}>{summary.fail}</span>
-          <p className="summary-card-foot">Needs hardening fixes</p>
-        </div>
-
-        <div className="summary-card">
-          <div className="flex justify-between items-center">
-            <span className="summary-card-label">Checks Passed</span>
-            <span className="material-icons" style={{ color: 'var(--color-pass)', fontSize: '1.25rem' }}>check_circle_outline</span>
-          </div>
-          <span className="summary-card-val" style={{ color: 'var(--color-pass)' }}>{summary.pass}</span>
-          <p className="summary-card-foot">Configured secure</p>
-        </div>
-
-        <div className="summary-card">
-          <div className="flex justify-between items-center">
-            <span className="summary-card-label">Checks Unknown</span>
-            <span className="material-icons" style={{ color: 'var(--color-unknown)', fontSize: '1.25rem' }}>help_outline</span>
-          </div>
-          <span className="summary-card-val" style={{ color: 'var(--color-unknown)' }}>{summary.unknown}</span>
-          <p className="summary-card-foot">Missing binary or permissions</p>
-        </div>
-      </section>
-
-      {/* Main Grid: Left is Findings list, Right is Priority Fixes */}
-      <div className="main-grid">
-        <div className="left-column">
-          {/* Filters card */}
-          <div className="filter-bar">
-            <div className="search-container">
-              <span className="material-icons search-icon">search</span>
-              <input 
-                type="text" 
-                placeholder="Search rule ID, title, command, or evidence..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="search-input"
-              />
+        )}
+        
+        {/* METADATA TARGET BLOCK (Identifies Linux Config) */}
+        <section className="dashboard-header" style={{ gridTemplateColumns: '1fr', marginBottom: '2rem' }}>
+          <div className="glass-panel meta-panel" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div className="brand-badge" style={{ marginBottom: '0.25rem' }}>Target Specification</div>
+              <h2 style={{ fontSize: '1.25rem', color: '#fff', fontWeight: '700' }}>Host Configuration Overview</h2>
             </div>
             
-            <div className="filter-groups">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1 }}>
-                <span className="filter-label">Status Filter</span>
-                <div className="btn-group">
-                  {["ALL", "FAIL", "PASS", "UNKNOWN"].map(status => (
-                    <button 
-                      key={status}
-                      className={`filter-btn ${statusFilter === status ? 'filter-btn-active' : ''}`}
-                      onClick={() => setStatusFilter(status)}
-                    >
-                      {status}
-                    </button>
-                  ))}
-                </div>
+            <div className="meta-grid" style={{ flex: 1, justifyContent: 'flex-end', maxWidth: '600px' }}>
+              <div className="meta-card">
+                <div className="meta-card-label">Target Name</div>
+                <div className="meta-card-value">{meta.target}</div>
               </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flex: 1 }}>
-                <span className="filter-label">Severity Filter</span>
-                <div className="btn-group">
-                  {["ALL", "critical", "high", "medium", "low"].map(sev => (
-                    <button 
-                      key={sev}
-                      className={`filter-btn ${severityFilter === sev ? 'filter-btn-active' : ''}`}
-                      onClick={() => setSeverityFilter(sev)}
-                    >
-                      {sev.charAt(0).toUpperCase() + sev.slice(1)}
-                    </button>
-                  ))}
-                </div>
+              <div className="meta-card">
+                <div className="meta-card-label">Transport Link</div>
+                <div className="meta-card-value">{meta.transport}</div>
+              </div>
+              <div className="meta-card">
+                <div className="meta-card-label">Timestamp</div>
+                <div className="meta-card-value">{new Date(meta.timestamp).toLocaleTimeString()}</div>
               </div>
             </div>
           </div>
+        </section>
 
-          {/* Findings List */}
-          <div className="flex flex-col gap-4">
+        {/* METRICS ROW */}
+        <section className="metrics-grid">
+          <div className="glass-panel metric-card">
+            <span className="metric-label">Compliance score</span>
+            <div className="metric-value" style={{ color: complianceScore > 75 ? 'var(--color-pass)' : (complianceScore > 40 ? 'var(--color-warn)' : 'var(--color-fail)') }}>
+              {complianceScore}%
+            </div>
+            <p className="metric-desc">Checks passing CIS baseline requirements</p>
+            <div className="metric-bar-bg">
+              <div className="metric-bar-fill" style={{ width: `${complianceScore}%`, backgroundColor: complianceScore > 75 ? 'var(--color-pass)' : (complianceScore > 40 ? 'var(--color-warn)' : 'var(--color-fail)') }} />
+            </div>
+          </div>
+
+          <div className="glass-panel metric-card">
             <div className="flex justify-between items-center">
-              <h2 className="section-title">Security Rule Audits ({filteredFindings.length})</h2>
-              {filteredFindings.length < findings.length && (
-                <span className="reset-text" onClick={resetFilters}>Reset Filters</span>
+              <span className="metric-label">Failing rules</span>
+              <span className="material-icons" style={{ color: 'var(--color-fail)', fontSize: '1.1rem' }}>error</span>
+            </div>
+            <div className="metric-value" style={{ color: 'var(--color-fail)' }}>{summary.fail}</div>
+            <p className="metric-desc">Baseline configurations out of spec</p>
+          </div>
+
+          <div className="glass-panel metric-card">
+            <div className="flex justify-between items-center">
+              <span className="metric-label">Passing rules</span>
+              <span className="material-icons" style={{ color: 'var(--color-pass)', fontSize: '1.1rem' }}>check_circle</span>
+            </div>
+            <div className="metric-value" style={{ color: 'var(--color-pass)' }}>{summary.pass}</div>
+            <p className="metric-desc">Baseline configurations correctly hardened</p>
+          </div>
+
+          <div className="glass-panel metric-card">
+            <div className="flex justify-between items-center">
+              <span className="metric-label">Unresolved rules</span>
+              <span className="material-icons" style={{ color: 'var(--color-unknown)', fontSize: '1.1rem' }}>help</span>
+            </div>
+            <div className="metric-value" style={{ color: 'var(--color-unknown)' }}>{summary.unknown}</div>
+            <p className="metric-desc">Checks missing binary dependencies</p>
+          </div>
+        </section>
+
+        {/* VERDICTS GRID SPLIT */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
+          <style>{`
+            @media (min-width: 1024px) {
+              .grid-split {
+                display: grid;
+                grid-template-columns: 3fr 2fr;
+                gap: 2rem;
+              }
+            }
+          `}</style>
+          <div className="grid-split">
+            
+            {/* LEFT COLUMN: BENCHMARK CHECKS & EVIDENCE */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <div className="rules-header">
+                <div>
+                  <h2 className="section-title" style={{ fontSize: '1.15rem', fontWeight: '700' }}>Baseline Policies Audited ({filteredFindings.length})</h2>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Evaluations generated directly from host output</p>
+                </div>
+              </div>
+
+              {/* Filters Panel */}
+              <div className="search-filter-box">
+                <div className="search-input-wrapper">
+                  <span className="material-icons search-icon-svg" style={{ fontSize: '1.1rem' }}>search</span>
+                  <input 
+                    type="text" 
+                    placeholder="Search by ID, rule name, or executed command..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="cyber-search-input"
+                  />
+                </div>
+
+                <div className="button-filters">
+                  <div className="filter-group-wrapper">
+                    <span className="filter-label">Filter Verdict</span>
+                    <div className="filter-btn-grid">
+                      {["ALL", "FAIL", "PASS", "UNKNOWN"].map(status => (
+                        <button 
+                          key={status}
+                          className={`cyber-filter-btn ${statusFilter === status ? 'active' : ''}`}
+                          onClick={() => setStatusFilter(status)}
+                        >
+                          {status}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="filter-group-wrapper">
+                    <span className="filter-label">Severity Level</span>
+                    <div className="filter-btn-grid">
+                      {["ALL", "critical", "high", "medium", "low"].map(sev => (
+                        <button 
+                          key={sev}
+                          className={`cyber-filter-btn ${severityFilter === sev ? 'active' : ''}`}
+                          onClick={() => setSeverityFilter(sev)}
+                        >
+                          {sev.charAt(0).toUpperCase() + sev.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Finding Cards List */}
+              <div className="rules-list">
+                {filteredFindings.length === 0 ? (
+                  <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', borderStyle: 'dashed' }}>
+                    <p style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>NO MATCHING AUDIT DATA FOUND</p>
+                    <span style={{ color: 'var(--color-primary)', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.75rem', marginTop: '0.5rem', display: 'inline-block' }} onClick={resetFilters}>Reset filters</span>
+                  </div>
+                ) : (
+                  filteredFindings.map((finding) => {
+                    const isExpanded = !!expandedFindings[finding.rule_id]
+                    return (
+                      <div key={finding.rule_id} className="rule-card glass-panel-interactive">
+                        <div 
+                          className="rule-card-header cursor-pointer"
+                          onClick={() => toggleExpand(finding.rule_id)}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1 }}>
+                            <div className="rule-meta">
+                              <span className="rule-id">{finding.rule_id}</span>
+                              <span className={`severity-tag ${finding.severity_hint}`}>
+                                {finding.severity_hint}
+                              </span>
+                            </div>
+                            <h4 className="rule-title">{finding.title}</h4>
+                          </div>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <span className={`status-badge-cyber ${finding.status}`}>
+                              {finding.status}
+                            </span>
+                            <span className="material-icons" style={{ color: 'var(--text-muted)', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform var(--transition-fast)', fontSize: '1.2rem' }}>
+                              expand_more
+                            </span>
+                          </div>
+                        </div>
+
+                        {isExpanded && (
+                          <div className="rule-details">
+                            <div className="command-viewer">
+                              <span className="command-label">Audited Baseline Command</span>
+                              <code className="command-code">{finding.command}</code>
+                            </div>
+                            <div className="command-viewer">
+                              <span className="command-label">Output Verification Evidence</span>
+                              <pre className={`evidence-box ${finding.status}`}>
+                                {finding.evidence || "[No stdout captured]"}
+                              </pre>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN: REMEDIATION GUIDE */}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div className="fixes-header">
+                <div>
+                  <h2 className="section-title" style={{ fontSize: '1.15rem', fontWeight: '700' }}>Remediation Guide</h2>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Failing rules sorted by severity priority</p>
+                </div>
+                <span className="badge-count" style={{ borderColor: 'var(--border-color)', background: 'var(--bg-surface)' }}>{fixList.length} Fixes</span>
+              </div>
+
+              {fixList.length === 0 ? (
+                <div className="glass-panel" style={{ padding: '3rem 1.5rem', textAlign: 'center' }}>
+                  <span className="material-icons" style={{ fontSize: '2.5rem', color: 'var(--color-pass)', marginBottom: '1rem' }}>check_circle</span>
+                  <h4 style={{ color: '#fff', fontSize: '0.85rem', marginBottom: '0.25rem', fontFamily: 'var(--font-mono)' }}>SYSTEM STATE PASSING</h4>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>No configuration drifts detected.</p>
+                </div>
+              ) : (
+                <div className="fix-card-wrapper" style={{ maxHeight: '1100px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {fixList.map((fix) => {
+                    const finding = findings.find(f => f.rule_id === fix.rule_id)
+                    const severity = finding ? finding.severity_hint : "high"
+                    const isCopied = copiedFixId === fix.rule_id
+
+                    return (
+                      <div key={fix.rule_id} className="cyber-fix-card glass-panel">
+                        <div className="fix-meta-row">
+                          <div className="flex items-center gap-2">
+                            <span className={`priority-circle ${severity}`}>
+                              #{fix.priority}
+                            </span>
+                            <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#fff' }}>{fix.category}</span>
+                          </div>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>{fix.rule_id}</span>
+                        </div>
+
+                        <div className="fix-desc-box">
+                          <div className="fix-finding">
+                            <strong>System State:</strong> {fix.finding}
+                          </div>
+                          <div className="fix-why">
+                            <strong>Policy Impact:</strong> {fix.why_it_matters}
+                          </div>
+                        </div>
+
+                        <div className="cyber-copy-container">
+                          <div className="cyber-copy-code">
+                            <code>{fix.fix_command}</code>
+                          </div>
+                          <button 
+                            className={`cyber-copy-btn ${isCopied ? 'copied' : ''}`}
+                            onClick={() => copyToClipboard(fix.fix_command, fix.rule_id)}
+                          >
+                            <span className="material-icons" style={{ fontSize: '0.9rem' }}>
+                              {isCopied ? "done" : "content_copy"}
+                            </span>
+                            <span>{isCopied ? "Copied" : "Copy"}</span>
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               )}
             </div>
 
-            {filteredFindings.length === 0 ? (
-              <div className="empty-state">
-                <span className="material-icons" style={{ fontSize: '3rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>search_off</span>
-                <p style={{ color: 'var(--text-secondary)' }}>No matching findings found.</p>
-              </div>
-            ) : (
-              filteredFindings.map((finding) => {
-                const isExpanded = !!expandedFindings[finding.rule_id]
-                return (
-                  <div key={finding.rule_id} className="finding-card animate-fade-in">
-                    <div 
-                      className="finding-header cursor-pointer"
-                      onClick={() => toggleExpandFinding(finding.rule_id)}
-                    >
-                      <div className="flex flex-col gap-2" style={{ flex: 1 }}>
-                        <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
-                          <span className="rule-id-badge">{finding.rule_id}</span>
-                          <span className={`severity-badge severity-${finding.severity_hint}`}>
-                            {finding.severity_hint}
-                          </span>
-                        </div>
-                        <h3 className="finding-title">{finding.title}</h3>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <span className={`status-badge status-${finding.status}`}>
-                          {finding.status}
-                        </span>
-                        <span className="material-icons" style={{ color: 'var(--text-secondary)', transition: 'transform var(--transition-fast)', transform: isExpanded ? 'rotate(180deg)' : 'none' }}>
-                          expand_more
-                        </span>
-                      </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="finding-details">
-                        <div className="detail-row">
-                          <span className="detail-label">Command Executed</span>
-                          <code className="code-block">{finding.command}</code>
-                        </div>
-                        <div className="detail-row">
-                          <span className="detail-label">
-                            {finding.status === "UNKNOWN" ? "Capture Details / Error" : "Capture Evidence"}
-                          </span>
-                          <pre className={`pre-block status-${finding.status}`}>
-                            {finding.evidence || "No command output captured."}
-                          </pre>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )
-              })
-            )}
           </div>
         </div>
 
-        {/* Right column: prioritized remediation fixes */}
-        <div className="right-column">
-          <div className="sticky-section">
-            <div className="flex justify-between items-center" style={{ marginBottom: '1.25rem' }}>
-              <div>
-                <h2 className="section-title">Remediation Guide</h2>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Failures ordered by priority</p>
-              </div>
-              <span className="badge-count">{fixList.length} Fixes</span>
-            </div>
-
-            {fixList.length === 0 ? (
-              <div className="empty-state">
-                <span className="material-icons" style={{ fontSize: '3.5rem', color: 'var(--color-pass)', marginBottom: '1rem' }}>check_circle</span>
-                <h3 style={{ color: 'var(--text-primary)', marginBottom: '0.25rem' }}>Host Fully Hardened</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>No remediation steps required.</p>
-              </div>
-            ) : (
-              <div className="fix-list-container">
-                {fixList.map((fix) => {
-                  const findingRef = findings.find(f => f.rule_id === fix.rule_id)
-                  const severity = findingRef ? findingRef.severity_hint : "high"
-                  const isCopied = copiedFixId === fix.rule_id
-
-                  return (
-                    <div key={fix.rule_id} className="fix-card">
-                      <div className="fix-card-header">
-                        <div className="flex items-center gap-2">
-                          <span className={`priority-number severity-${severity}`}>
-                            #{fix.priority}
-                          </span>
-                          <span className="fix-category">{fix.category}</span>
-                        </div>
-                        <span className="fix-rule-id">{fix.rule_id}</span>
-                      </div>
-
-                      <div className="fix-body">
-                        <p className="fix-finding-text">
-                          <strong>Finding:</strong> {fix.finding}
-                        </p>
-                        <p className="fix-why-text">
-                          <strong>Impact:</strong> {fix.why_it_matters}
-                        </p>
-                      </div>
-
-                      <div className="copy-command-container">
-                        <div className="copy-command-code">
-                          <code>{fix.fix_command}</code>
-                        </div>
-                        <button 
-                          className={`copy-btn ${isCopied ? 'copied' : ''}`}
-                          onClick={() => copyToClipboard(fix.fix_command, fix.rule_id)}
-                        >
-                          <span className="material-icons" style={{ fontSize: '1rem' }}>
-                            {isCopied ? "check" : "content_copy"}
-                          </span>
-                          <span>{isCopied ? "Copied!" : "Copy"}</span>
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      </main>
     </div>
   )
 }
