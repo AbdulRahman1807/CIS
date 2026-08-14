@@ -610,3 +610,18 @@ body {
 .copy-btn.copied {
   background-color: var(--color-pass) !important;
 }
+
+/* Antigravity Design Motion and Float Enhancements */
+.finding-card, .fix-card, .summary-card {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  will-change: transform, box-shadow;
+}
+
+.finding-card:hover, .fix-card:hover, .summary-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: rgba(59, 130, 246, 0.45) !important;
+}
+
