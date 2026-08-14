@@ -1,12 +1,12 @@
 {
   "meta": {
-    "target": "cis-misconfigured",
-    "timestamp": "2026-08-14T05:48:12.321976+00:00",
+    "target": "cis-clean",
+    "timestamp": "2026-08-14T07:13:58.019301+00:00",
     "transport": "docker"
   },
   "summary": {
-    "pass": 2,
-    "fail": 8,
+    "pass": 10,
+    "fail": 0,
     "unknown": 0
   },
   "findings": [
@@ -14,24 +14,24 @@
       "rule_id": "CIS-5.2.10",
       "title": "SSH root login disabled",
       "command": "grep -iE ^(PermitRootLogin|PasswordAuthentication) /etc/ssh/sshd_config",
-      "status": "FAIL",
-      "evidence": "PermitRootLogin yes",
+      "status": "PASS",
+      "evidence": "PermitRootLogin not set to yes",
       "severity_hint": "high"
     },
     {
       "rule_id": "CIS-5.2.11",
       "title": "SSH password auth disabled",
       "command": "grep -iE ^(PermitRootLogin|PasswordAuthentication) /etc/ssh/sshd_config",
-      "status": "FAIL",
-      "evidence": "PasswordAuthentication yes",
+      "status": "PASS",
+      "evidence": "PasswordAuthentication not set to yes",
       "severity_hint": "high"
     },
     {
       "rule_id": "CIS-5.3.1",
       "title": "Minimum password length \u226514",
       "command": "cat /etc/login.defs",
-      "status": "FAIL",
-      "evidence": "PASS_MIN_LEN\t5",
+      "status": "PASS",
+      "evidence": "PASS_MIN_LEN\t14",
       "severity_hint": "medium"
     },
     {
@@ -54,116 +54,43 @@
       "rule_id": "CIS-6.1.10",
       "title": "No world-writable files in /etc, /usr/bin, /usr/sbin",
       "command": "find /etc /usr/bin /usr/sbin -xdev -type f -perm -0002",
-      "status": "FAIL",
-      "evidence": "/etc/cis_test_world_writable",
+      "status": "PASS",
+      "evidence": "no world-writable files found",
       "severity_hint": "medium"
     },
     {
       "rule_id": "CIS-3.5.1",
       "title": "Firewall active",
       "command": "iptables -L INPUT -n",
-      "status": "FAIL",
-      "evidence": "Chain INPUT (policy ACCEPT)\ntarget     prot opt source               destination",
+      "status": "PASS",
+      "evidence": "INPUT policy is DROP",
       "severity_hint": "high"
     },
     {
       "rule_id": "CIS-2.2.4",
       "title": "Automatic security updates enabled",
       "command": "cat /etc/apt/apt.conf.d/20auto-upgrades",
-      "status": "FAIL",
-      "evidence": "20auto-upgrades config not found or not enabled",
+      "status": "PASS",
+      "evidence": "APT::Periodic::Unattended-Upgrade \"1\";",
       "severity_hint": "medium"
     },
     {
       "rule_id": "CIS-5.4.1",
       "title": "No accounts with empty passwords",
       "command": "awk -F: ($2==\"\"){print $1} /etc/shadow",
-      "status": "FAIL",
-      "evidence": "cis_test_emptypass",
+      "status": "PASS",
+      "evidence": "no accounts with empty passwords",
       "severity_hint": "critical"
     },
     {
       "rule_id": "CIS-5.2.9",
       "title": "No blanket NOPASSWD wildcard in sudoers",
       "command": "grep -r NOPASSWD /etc/sudoers /etc/sudoers.d",
-      "status": "FAIL",
-      "evidence": "/etc/sudoers.d/90-cis-test-nopasswd:ALL ALL=(ALL) NOPASSWD:ALL",
+      "status": "PASS",
+      "evidence": "no NOPASSWD entries found",
       "severity_hint": "high"
     }
   ],
-  "fix_list": [
-    {
-      "priority": 1,
-      "rule_id": "CIS-5.4.1",
-      "category": "Account security",
-      "finding": "One or more accounts have an empty password (cis_test_emptypass).",
-      "why_it_matters": "An empty password lets anyone log in as that account with no credential at all.",
-      "fix_command": "sudo passwd -l <account>   # lock each account listed in the evidence, or set a real password",
-      "evidence_ref": "CIS-5.4.1"
-    },
-    {
-      "priority": 2,
-      "rule_id": "CIS-3.5.1",
-      "category": "Network hardening",
-      "finding": "No active default-deny firewall policy was found (Chain INPUT (policy ACCEPT)\ntarget     prot opt source               destination).",
-      "why_it_matters": "Without a default-deny firewall policy, every listening service is directly reachable from the network.",
-      "fix_command": "sudo iptables -P INPUT DROP && sudo iptables -A INPUT -i lo -j ACCEPT && sudo iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT",
-      "evidence_ref": "CIS-3.5.1"
-    },
-    {
-      "priority": 3,
-      "rule_id": "CIS-5.2.10",
-      "category": "SSH hardening",
-      "finding": "Root login over SSH is permitted (PermitRootLogin yes).",
-      "why_it_matters": "A leaked or brute-forced root credential grants full remote access with no separate privilege step.",
-      "fix_command": "sudo sed -i 's/^PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && sudo systemctl reload sshd",
-      "evidence_ref": "CIS-5.2.10"
-    },
-    {
-      "priority": 4,
-      "rule_id": "CIS-5.2.11",
-      "category": "SSH hardening",
-      "finding": "SSH password authentication is enabled (PasswordAuthentication yes), allowing brute-force login attempts.",
-      "why_it_matters": "Password auth is vulnerable to brute-force and credential-stuffing attacks; key-based auth removes that attack surface entirely.",
-      "fix_command": "sudo sed -i 's/^PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config && sudo systemctl reload sshd",
-      "evidence_ref": "CIS-5.2.11"
-    },
-    {
-      "priority": 5,
-      "rule_id": "CIS-5.2.9",
-      "category": "Privilege escalation",
-      "finding": "A blanket NOPASSWD sudoers entry was found (/etc/sudoers.d/90-cis-test-nopasswd:ALL ALL=(ALL) NOPASSWD:ALL).",
-      "why_it_matters": "A passwordless, unrestricted sudo rule lets anyone with access to that account become root with no additional authentication.",
-      "fix_command": "sudo visudo   # remove the NOPASSWD:ALL line shown in the evidence",
-      "evidence_ref": "CIS-5.2.9"
-    },
-    {
-      "priority": 6,
-      "rule_id": "CIS-2.2.4",
-      "category": "Patch management",
-      "finding": "Automatic security updates are not enabled (20auto-upgrades config not found or not enabled).",
-      "why_it_matters": "Unpatched systems remain exposed to publicly known vulnerabilities long after fixes are available.",
-      "fix_command": "sudo apt-get install -y unattended-upgrades && sudo dpkg-reconfigure -plow unattended-upgrades",
-      "evidence_ref": "CIS-2.2.4"
-    },
-    {
-      "priority": 7,
-      "rule_id": "CIS-5.3.1",
-      "category": "Password policy",
-      "finding": "Minimum password length policy is too weak or unset (PASS_MIN_LEN\t5).",
-      "why_it_matters": "Short passwords are far more susceptible to brute-force and dictionary attacks.",
-      "fix_command": "sudo sed -i '/^PASS_MIN_LEN/d' /etc/login.defs && printf 'PASS_MIN_LEN\\t14\\n' | sudo tee -a /etc/login.defs",
-      "evidence_ref": "CIS-5.3.1"
-    },
-    {
-      "priority": 8,
-      "rule_id": "CIS-6.1.10",
-      "category": "File permissions",
-      "finding": "World-writable files found in sensitive system paths (/etc/cis_test_world_writable).",
-      "why_it_matters": "A world-writable file under /etc or a system bin directory can be modified by any local user to escalate privileges or plant malicious content.",
-      "fix_command": "sudo chmod o-w <file>   # apply to each file path listed in the evidence",
-      "evidence_ref": "CIS-6.1.10"
-    }
-  ],
+  "fix_list": [],
   "unknowns": []
 }

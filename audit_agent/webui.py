@@ -106,6 +106,26 @@ class AuditReportHandler(http.server.BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": f"Exception starting scan: {str(e)}"}).encode("utf-8"))
+        elif self.path == "/api/containers":
+            import subprocess
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            try:
+                # Fixed argv, no user input involved — lists real running
+                # container names so the UI's target field reflects what's
+                # actually on the host instead of a hardcoded guess.
+                proc = subprocess.run(
+                    ["docker", "ps", "--format", "{{.Names}}"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                names = [n for n in proc.stdout.strip().splitlines() if n]
+                self.wfile.write(json.dumps({"containers": names}).encode("utf-8"))
+            except Exception as e:
+                self.wfile.write(json.dumps({"containers": [], "error": str(e)}).encode("utf-8"))
         elif self.path in ("/api/report", "/report.json"):
             # Optional api endpoint for convenience
             self.send_response(200)
