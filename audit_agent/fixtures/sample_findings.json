@@ -1,0 +1,18 @@
+[
+  {
+    "rule_id": "CIS-5.2.10",
+    "title": "SSH root login disabled",
+    "command": "sshd -T",
+    "status": "FAIL",
+    "evidence": "permitrootlogin yes",
+    "severity_hint": "high"
+  },
+  {
+    "rule_id": "CIS-6.1.2",
+    "title": "/etc/passwd ownership/perms",
+    "command": "stat -c %U:%G %a /etc/passwd",
+    "status": "PASS",
+    "evidence": "root:root 644",
+    "severity_hint": "medium"
+  }
+]
