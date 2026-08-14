@@ -1,2 +1,3 @@
-# Core transport, rule engine, CLI, and Web UI use Python standard library only.
+# The entire pipeline (connector, collector, allowlist, rules, prioritizer,
+# report, cli, and Web UI) uses the Python 3 standard library only.
 # No external packages are required to run the core agent or serve the UI.

@@ -1,4 +1,6 @@
 import unittest
+import os
+import json
 from audit_agent.rules import (
     evaluate,
     parse_ssh_root_login,
@@ -306,6 +308,54 @@ class TestRules(unittest.TestCase):
         # CIS-5.2.9 (sudoers NOPASSWD) -> PASS
         self.assertEqual(findings[9]["rule_id"], "CIS-5.2.9")
         self.assertEqual(findings[9]["status"], "PASS")
+
+    def test_evaluate_from_fixture_file(self):
+        fixture_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "audit_agent", "fixtures", "sample_captures.json")
+        with open(fixture_path, "r") as f:
+            captures = json.load(f)
+        findings = evaluate(captures)
+        self.assertEqual(len(findings), 10)
+        
+        # Verify specific rules parsed from the resolved captures:
+        # CIS-5.2.10 (sshd root login) -> FAIL
+        self.assertEqual(findings[0]["rule_id"], "CIS-5.2.10")
+        self.assertEqual(findings[0]["status"], "FAIL")
+        
+        # CIS-5.2.11 (sshd password auth) -> FAIL
+        self.assertEqual(findings[1]["rule_id"], "CIS-5.2.11")
+        self.assertEqual(findings[1]["status"], "FAIL")
+        
+        # CIS-5.3.1 (login_defs) -> FAIL
+        self.assertEqual(findings[2]["rule_id"], "CIS-5.3.1")
+        self.assertEqual(findings[2]["status"], "FAIL")
+        
+        # CIS-6.1.2 (passwd perms) -> PASS
+        self.assertEqual(findings[3]["rule_id"], "CIS-6.1.2")
+        self.assertEqual(findings[3]["status"], "PASS")
+        
+        # CIS-6.1.3 (shadow perms) -> PASS
+        self.assertEqual(findings[4]["rule_id"], "CIS-6.1.3")
+        self.assertEqual(findings[4]["status"], "PASS")
+        
+        # CIS-6.1.10 (world-writable) -> FAIL
+        self.assertEqual(findings[5]["rule_id"], "CIS-6.1.10")
+        self.assertEqual(findings[5]["status"], "FAIL")
+        
+        # CIS-3.5.1 (firewall) -> FAIL
+        self.assertEqual(findings[6]["rule_id"], "CIS-3.5.1")
+        self.assertEqual(findings[6]["status"], "FAIL")
+        
+        # CIS-2.2.4 (auto updates) -> FAIL
+        self.assertEqual(findings[7]["rule_id"], "CIS-2.2.4")
+        self.assertEqual(findings[7]["status"], "FAIL")
+        
+        # CIS-5.4.1 (empty password accounts) -> FAIL
+        self.assertEqual(findings[8]["rule_id"], "CIS-5.4.1")
+        self.assertEqual(findings[8]["status"], "FAIL")
+        
+        # CIS-5.2.9 (blanket NOPASSWD:ALL) -> FAIL
+        self.assertEqual(findings[9]["rule_id"], "CIS-5.2.9")
+        self.assertEqual(findings[9]["status"], "FAIL")
 
 if __name__ == "__main__":
     unittest.main()
