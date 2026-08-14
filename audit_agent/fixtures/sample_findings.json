@@ -2,10 +2,26 @@
   {
     "rule_id": "CIS-5.2.10",
     "title": "SSH root login disabled",
-    "command": "sshd -T",
+    "command": "grep -iE ^(PermitRootLogin|PasswordAuthentication) /etc/ssh/sshd_config",
     "status": "FAIL",
-    "evidence": "permitrootlogin yes",
+    "evidence": "PermitRootLogin yes",
     "severity_hint": "high"
+  },
+  {
+    "rule_id": "CIS-5.2.11",
+    "title": "SSH password auth disabled",
+    "command": "grep -iE ^(PermitRootLogin|PasswordAuthentication) /etc/ssh/sshd_config",
+    "status": "FAIL",
+    "evidence": "PasswordAuthentication yes",
+    "severity_hint": "high"
+  },
+  {
+    "rule_id": "CIS-5.3.1",
+    "title": "Minimum password length \u226514",
+    "command": "cat /etc/login.defs",
+    "status": "FAIL",
+    "evidence": "PASS_MIN_LEN\t5",
+    "severity_hint": "medium"
   },
   {
     "rule_id": "CIS-6.1.2",
@@ -14,5 +30,53 @@
     "status": "PASS",
     "evidence": "root:root 644",
     "severity_hint": "medium"
+  },
+  {
+    "rule_id": "CIS-6.1.3",
+    "title": "/etc/shadow ownership/perms",
+    "command": "stat -c %U:%G %a /etc/shadow",
+    "status": "PASS",
+    "evidence": "root:shadow 640",
+    "severity_hint": "high"
+  },
+  {
+    "rule_id": "CIS-6.1.10",
+    "title": "No world-writable files in /etc, /usr/bin, /usr/sbin",
+    "command": "find /etc /usr/bin /usr/sbin -xdev -type f -perm -0002",
+    "status": "FAIL",
+    "evidence": "/etc/cis_test_world_writable",
+    "severity_hint": "medium"
+  },
+  {
+    "rule_id": "CIS-3.5.1",
+    "title": "Firewall active",
+    "command": "iptables -L INPUT -n",
+    "status": "FAIL",
+    "evidence": "Chain INPUT (policy ACCEPT)\ntarget     prot opt source               destination",
+    "severity_hint": "high"
+  },
+  {
+    "rule_id": "CIS-2.2.4",
+    "title": "Automatic security updates enabled",
+    "command": "cat /etc/apt/apt.conf.d/20auto-upgrades",
+    "status": "FAIL",
+    "evidence": "20auto-upgrades config not found or not enabled",
+    "severity_hint": "medium"
+  },
+  {
+    "rule_id": "CIS-5.4.1",
+    "title": "No accounts with empty passwords",
+    "command": "awk -F: ($2==\"\"){print $1} /etc/shadow",
+    "status": "FAIL",
+    "evidence": "cis_test_emptypass",
+    "severity_hint": "critical"
+  },
+  {
+    "rule_id": "CIS-5.2.9",
+    "title": "No blanket NOPASSWD wildcard in sudoers",
+    "command": "grep -r NOPASSWD /etc/sudoers /etc/sudoers.d",
+    "status": "FAIL",
+    "evidence": "/etc/sudoers.d/90-cis-test-nopasswd:ALL ALL=(ALL) NOPASSWD:ALL",
+    "severity_hint": "high"
   }
 ]
