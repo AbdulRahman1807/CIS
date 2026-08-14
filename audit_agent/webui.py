@@ -63,7 +63,7 @@ class AuditReportHandler(http.server.BaseHTTPRequestHandler):
             output_html = html_template.replace("/* REPORT_JSON_DATA */", f"window.AUDIT_REPORT = {json_str};")
             
             self.wfile.write(output_html.encode("utf-8"))
-        elif self.path == "/api/report":
+        elif self.path in ("/api/report", "/report.json"):
             # Optional api endpoint for convenience
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
