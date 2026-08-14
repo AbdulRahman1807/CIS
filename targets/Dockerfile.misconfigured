@@ -1,0 +1,44 @@
+FROM ubuntu:22.04
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      openssh-server iptables sudo libcap2-bin && \
+    rm -rf /var/lib/apt/lists/*
+
+# --- see Dockerfile.clean for why this is needed: `iptables -L` as a
+#     non-root exec user needs a file capability on the real binary, not
+#     just --cap-add=NET_ADMIN on the container. ---
+RUN setcap cap_net_admin,cap_net_raw+ep "$(readlink -f "$(command -v iptables)")"
+
+# --- CIS-5.2.10 / CIS-5.2.11: SSH left wide open ---
+RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+# --- CIS-5.3.1: weak password policy ---
+RUN sed -i 's/^PASS_MIN_LEN.*/PASS_MIN_LEN\t5/' /etc/login.defs
+
+# --- CIS-6.1.10: a world-writable file planted under /etc ---
+RUN touch /etc/cis_test_world_writable && chmod 666 /etc/cis_test_world_writable
+
+# --- CIS-2.2.4: automatic security updates — file intentionally ABSENT.
+#     Its absence is the FAIL evidence itself (see WORKPLAN.md §3 footnote),
+#     nothing to write here on purpose. ---
+
+# --- CIS-5.4.1: one account with an empty password ---
+RUN useradd -m -s /bin/bash cis_test_emptypass && passwd -d cis_test_emptypass
+
+# --- CIS-5.2.9: blanket NOPASSWD wildcard in sudoers ---
+RUN echo 'ALL ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-cis-test-nopasswd && \
+    chmod 440 /etc/sudoers.d/90-cis-test-nopasswd
+
+# CIS-6.1.2 / CIS-6.1.3 (passwd/shadow perms) are left at the base image's
+# correct defaults on purpose — a misconfigured target should not pass
+# every single rule vacuously by being broken in unrelated ways.
+
+# --- least-privilege audit user, in `shadow` group so this target produces
+#     real evidenced FAILs rather than UNKNOWNs (broken target's job) ---
+RUN useradd -m -G shadow -s /bin/bash audituser
+
+COPY entrypoint-misconfigured.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

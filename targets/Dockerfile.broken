@@ -1,0 +1,29 @@
+FROM ubuntu:22.04
+
+# NOTE: iptables is intentionally NOT installed. CIS-3.5.1 must resolve
+# UNKNOWN with reason "binary not found in container" — this exercises
+# collector.classify()'s missing-binary path (handout Part 6.7,
+# WORKPLAN.md §4 Person A). Do not add iptables here.
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      openssh-server sudo && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+RUN echo 'ALL ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-cis-test-nopasswd && \
+    chmod 440 /etc/sudoers.d/90-cis-test-nopasswd
+
+# --- least-privilege audit user, deliberately NOT added to the `shadow`
+#     group: reading /etc/shadow (cmd_empty_passwd, an awk over its
+#     contents) must fail with a real "Permission denied", exercising
+#     collector.classify()'s permission-denied path. `stat` on /etc/shadow
+#     still succeeds here (stat only needs search permission on /etc, not
+#     read permission on the file itself), so CIS-6.1.3 still gets real
+#     PASS/FAIL evidence on this target — only the content-reading check
+#     (CIS-5.4.1) goes UNKNOWN. ---
+RUN useradd -m -s /bin/bash audituser
+
+# No custom entrypoint needed — nothing here depends on runtime capabilities.
+CMD ["sleep", "infinity"]

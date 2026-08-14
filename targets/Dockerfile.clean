@@ -1,0 +1,45 @@
+FROM ubuntu:22.04
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      openssh-server iptables sudo libcap2-bin && \
+    rm -rf /var/lib/apt/lists/*
+
+# --- CIS-3.5.1 read path: `iptables -L` (nf_tables backend) checks for
+#     real root, not just CAP_NET_ADMIN, when the CALLING PROCESS is
+#     non-root — `docker run --cap-add=NET_ADMIN` alone is not enough once
+#     audituser (a non-root user, see §0) is the one running it. Fix is a
+#     FILE capability on the real ELF binary (iptables itself is an
+#     update-alternatives symlink), granted once at build time, not an
+#     ambient capability we'd have to re-grant per exec. Verified working
+#     end-to-end against a live container before this was written down —
+#     see WORKPLAN.md §4 footnote for the failure mode this replaces.
+RUN setcap cap_net_admin,cap_net_raw+ep "$(readlink -f "$(command -v iptables)")"
+
+# --- CIS-5.2.10 / CIS-5.2.11: SSH hardened ---
+RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
+    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+
+# --- CIS-5.3.1: password minimum length policy ---
+RUN sed -i 's/^PASS_MIN_LEN.*/PASS_MIN_LEN\t14/' /etc/login.defs
+
+# --- CIS-6.1.2 / CIS-6.1.3: correct ownership/perms on passwd + shadow ---
+RUN chown root:root /etc/passwd && chmod 644 /etc/passwd && \
+    chown root:shadow /etc/shadow && chmod 640 /etc/shadow
+
+# --- CIS-2.2.4: automatic security updates configured ---
+RUN mkdir -p /etc/apt/apt.conf.d && \
+    printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' \
+      > /etc/apt/apt.conf.d/20auto-upgrades
+
+# CIS-6.1.10 (no world-writable files) and CIS-5.4.1 (no empty passwords)
+# and CIS-5.2.9 (no NOPASSWD wildcard) all pass on the untouched base image
+# — nothing to add here on purpose.
+
+# --- least-privilege audit user, in `shadow` group so shadow-reading
+#     checks return real evidence here (contrast with Dockerfile.broken) ---
+RUN useradd -m -G shadow -s /bin/bash audituser
+
+COPY entrypoint-clean.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
