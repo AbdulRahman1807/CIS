@@ -13,8 +13,13 @@ out loud.
 
 ## 0. Locked decisions (do not re-litigate mid-build)
 
-- **Language:** Python 3. Stdlib + `subprocess` only for the core path. No
-  `paramiko`, no `docker` SDK — both add setup risk you don't have time for.
+- **Language:** Python 3. Stdlib + `subprocess` only for the core path
+  (connector/collector/rules/prioritizer/report/cli). No `paramiko`, no
+  `docker` SDK — both add setup risk you don't have time for. The web UI
+  (`ui/`) is the one deliberate exception — React via Vite, scaffolded and
+  `npm install`ed already so there's no setup time left to lose — see §4
+  Person B. It only ever reads a static `report.json`; it never touches
+  Docker or the core path directly.
 - **Transport:** `docker exec` against a local container. This is the primary
   and *only* transport for the 3-hour build. SSH is explicitly out of scope —
   it's the stretch item in Part 7.2, and only worth touching after everything
@@ -61,10 +66,10 @@ CIS/
     report.py                # Person C
     cli.py                    # Person C — entrypoint: audit-agent --target <container>
     fixtures/
-      sample_captures.json  # Person A hand-writes this in the first 15 min
-                             # so B and C never have to wait on real Docker
-      sample_findings.json  # Person C hand-writes this in the first 15 min
-                             # so C never has to wait on A or B either
+      sample_captures.json  # Person A hand-writes this — not present yet,
+                             # A is mid-build; B doesn't wait, see §4 Person B
+      sample_findings.json  # Person C's hand-written fixture — already stubbed
+                             # with 2 example items, expand to the full 10
   targets/
     Dockerfile.clean          # already scaffolded, see §4 Person A
     entrypoint-clean.sh
@@ -75,6 +80,15 @@ CIS/
     test_collector.py       # Person A
     test_rules.py           # Person B
     test_prioritizer.py     # Person C
+  ui/                        # Person B — React (Vite) app, already scaffolded
+    src/
+      App.jsx                  # placeholder: fetches /report.json, dumps it
+      main.jsx
+      index.css
+    public/
+      report.json               # empty placeholder matching §2.2/§2.3 shape
+    package.json
+    README.md                    # contract + run instructions
   WORKPLAN.md             # this file
   REPORT.md                  # written 2:40–3:00, see §7
   README.md                   # "how to run it" — Person C, mirrors REPORT.md §11
@@ -83,6 +97,15 @@ CIS/
 
 Nobody creates files outside this tree. If you need a new file, say so in chat
 first — one-line heads-up, not a debate.
+
+**Status as of this doc:** `audit_agent/allowlist.py`, `connector.py`,
+`collector.py`, and `fixtures/sample_captures.json` are **not yet created** —
+Person A already started on these independently (see `targets/` — those
+Dockerfiles are A's, already in the repo) and will add the rest as they go.
+Nobody else should create those files; the layout above just reserves their
+place so A's work slots in without a merge conflict. Everything else in the
+tree above (B and C's files, `ui/`) is already scaffolded and ready to build
+on.
 
 ---
 
@@ -404,8 +427,8 @@ this is the "one real command, real target" milestone from handout §6.2.
 
 ---
 
-### Person B — Rule Engine
-**Owns:** `rules.py`, `tests/test_rules.py`
+### Person B — Rule Engine + Web UI
+**Owns:** `rules.py`, `ui/` (React app), `tests/test_rules.py`
 
 Builds entirely against `audit_agent/fixtures/sample_captures.json` — **never
 needs Docker running** to make progress. Once A's real collector output
@@ -443,6 +466,36 @@ line is worse than a crash.
 **Checkpoint gate for B:** by 1:15, `evaluate()` run against A's real captures
 from the misconfigured target produces ~7-8 real FAILs and 2-3 PASSes that B
 has manually verified against what's actually in the container.
+
+**Web UI (B's second task, starts once the checkpoint above is hit).**
+`ui/` is already scaffolded (Vite + React, plain JS, no router/state
+library — see `ui/README.md`) so B starts writing components immediately,
+no setup time lost. `npm install` has already been run once.
+
+The entire contract is one static fetch: `GET /report.json` returns exactly
+what `report.py`'s `build_report()` produces (§2.2/§2.3 shapes, plus
+`summary`/`unknowns`). `ui/src/App.jsx` is currently a placeholder that
+fetches and dumps the raw JSON — replace it with real components (summary
+counts, fix list in priority order color-coded by severity, findings table,
+UNKNOWNs with reasons), but keep the fetch contract exactly as-is. If the
+team wants to drop in an already-built UI instead of extending the
+placeholder, that's fine too — it only needs to hit the same `/report.json`
+contract, nothing else in `ui/` is load-bearing.
+
+`ui/public/report.json` holds an empty placeholder matching the shape now.
+Once C's `cli.py` writes a real `report.json`, copy it to
+`ui/public/report.json` (or symlink it) so `npm run dev` serves live data —
+agree with C on exactly where that copy step lives (in `cli.py` itself, or a
+one-line manual step) rather than guessing mid-build.
+
+This does **not** block C's pipeline: the UI only ever reads a JSON file C's
+code already produces, so B can build and test it entirely against
+`sample_findings.json`-derived fixture data, same as the rest of B's work.
+
+**Checkpoint gate for B (UI):** by 1:45, `npm run dev` in `ui/` serves a page
+at `localhost:5173` that renders a real `report.json` from the misconfigured
+target — fix list, findings table, and UNKNOWNs all visible, matching what
+`report.md` says for the same run.
 
 ---
 
@@ -523,8 +576,8 @@ with **zero partial credit** — verify it explicitly, don't assume it.
 | 0:00–0:15 | Read this doc, confirm §2/§3 contracts, assign roles | Hand-write `fixtures/sample_captures.json`; kick off `docker build`/`docker run` for all 3 targets in the background | Wait for fixture (~5 min) | Hand-write `fixtures/sample_findings.json` |
 | 0:15–0:45 | Parallel build | Real `connector.py`+`collector.py` against real `docker exec` on clean+misconfigured targets; build `targets/Dockerfile.*` | Build `rules.py` fully against the fixture | Build `prioritizer.py` + `report.py` against hand-written findings |
 | 0:45–1:15 | **Integration checkpoint 1** | Hand real captures to B | Swap fixture for A's real output, fix parser mismatches | Keep building report.py / cli.py skeleton |
-| 1:15–1:45 | **Integration checkpoint 2** | Support A/B integration issues | Findings verified against real misconfigured target | Wire full pipeline in `cli.py`, run end-to-end for the first time |
-| 1:45–2:15 | No-drift + hostile input | Add UNKNOWN handling for `targets/Dockerfile.broken` (missing binary, permission denied, timeout) | Confirm rules resolve UNKNOWN cleanly, no crashes | Verify 2 runs = identical JSON except timestamp; verify non-zero exit when target unreachable |
+| 1:15–1:45 | **Integration checkpoint 2** | Support A/B integration issues | Findings verified against real misconfigured target; start building `ui/` components against fixture report | Wire full pipeline in `cli.py`, run end-to-end for the first time |
+| 1:45–2:15 | No-drift + hostile input | Add UNKNOWN handling for `targets/Dockerfile.broken` (missing binary, permission denied, timeout) | `npm run dev` in `ui/` serving a real report.json from the misconfigured target at localhost:5173 | Verify 2 runs = identical JSON except timestamp; verify non-zero exit when target unreachable |
 | 2:15–2:35 | **Everyone reviews `allowlist.py` + `collector.py` together** — confirm zero mutating commands, zero string-built commands, credentials only from env | | | |
 | 2:35–2:40 | **BUILD FREEZE** — commit and push | | | |
 | 2:40–3:00 | REPORT.md (see §7) | writes §7.3 connector/collector row + 2 results rows | writes §7.2 rule set section in full | compiles doc, writes results table, "how we worked," "how to run it" |

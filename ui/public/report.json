@@ -1,0 +1,11 @@
+{
+  "meta": {
+    "target": "cis-misconfigured",
+    "timestamp": "1970-01-01T00:00:00Z",
+    "transport": "docker"
+  },
+  "summary": { "pass": 0, "fail": 0, "unknown": 0 },
+  "fix_list": [],
+  "findings": [],
+  "unknowns": []
+}
