@@ -1,3 +1,6 @@
-# The entire pipeline (connector, collector, allowlist, rules, prioritizer,
-# report, cli, and Web UI) uses the Python 3 standard library only.
-# No external packages are required to run the core agent or serve the UI.
+# connector.py / collector.py / allowlist.py use only the Python 3 stdlib
+# (subprocess, json, pathlib) — nothing to install for Person A's part.
+#
+# Person B / Person C: add whatever rules.py / prioritizer.py / report.py /
+# cli.py actually end up needing here as you go (e.g. an LLM SDK only if the
+# --llm stretch in WORKPLAN.md §4 gets built and organisers permit it).
