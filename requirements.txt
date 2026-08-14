@@ -1,0 +1,2 @@
+# Core transport, rule engine, CLI, and Web UI use Python standard library only.
+# No external packages are required to run the core agent or serve the UI.

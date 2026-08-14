@@ -1,0 +1,83 @@
+[
+  {
+    "command_id": "cmd_sshd_config",
+    "os_family": "linux",
+    "argv": ["sshd", "-T"],
+    "exit_code": 0,
+    "stdout": "permitrootlogin yes\npasswordauthentication yes\nport 22\n",
+    "stderr": "",
+    "status": "ok"
+  },
+  {
+    "command_id": "cmd_login_defs",
+    "os_family": "linux",
+    "argv": ["cat", "/etc/login.defs"],
+    "exit_code": 0,
+    "stdout": "# Login configuration\nPASS_MAX_DAYS 90\nPASS_MIN_LEN 5\nPASS_WARN_AGE 7\n",
+    "stderr": "",
+    "status": "ok"
+  },
+  {
+    "command_id": "cmd_stat_passwd",
+    "os_family": "linux",
+    "argv": ["stat", "-c", "%U:%G %a", "/etc/passwd"],
+    "exit_code": 0,
+    "stdout": "root:root 644\n",
+    "stderr": "",
+    "status": "ok"
+  },
+  {
+    "command_id": "cmd_stat_shadow",
+    "os_family": "linux",
+    "argv": ["stat", "-c", "%U:%G %a", "/etc/shadow"],
+    "exit_code": 0,
+    "stdout": "root:shadow 640\n",
+    "stderr": "",
+    "status": "ok"
+  },
+  {
+    "command_id": "cmd_world_writable",
+    "os_family": "linux",
+    "argv": ["find", "/etc", "/usr/bin", "/usr/sbin", "-xdev", "-type", "f", "-perm", "-0002"],
+    "exit_code": 0,
+    "stdout": "/etc/writable_file_planted\n/usr/bin/some_other_writable_file\n",
+    "stderr": "",
+    "status": "ok"
+  },
+  {
+    "command_id": "cmd_firewall",
+    "os_family": "linux",
+    "argv": ["iptables", "-L", "INPUT", "-n"],
+    "exit_code": 0,
+    "stdout": "Chain INPUT (policy ACCEPT)\ntarget     prot opt source               destination\n",
+    "stderr": "",
+    "status": "ok"
+  },
+  {
+    "command_id": "cmd_auto_updates",
+    "os_family": "linux",
+    "argv": ["cat", "/etc/apt/apt.conf.d/20auto-upgrades"],
+    "exit_code": 1,
+    "stdout": "",
+    "stderr": "cat: /etc/apt/apt.conf.d/20auto-upgrades: No such file or directory\n",
+    "status": "ok"
+  },
+  {
+    "command_id": "cmd_empty_passwd",
+    "os_family": "linux",
+    "argv": ["awk", "-F:", "($2==\"\"){print $1}", "/etc/shadow"],
+    "exit_code": 0,
+    "stdout": "cis_test_emptypass\n",
+    "stderr": "",
+    "status": "ok"
+  },
+  {
+    "command_id": "cmd_sudoers",
+    "os_family": "linux",
+    "argv": ["grep", "-r", "NOPASSWD", "/etc/sudoers", "/etc/sudoers.d"],
+    "exit_code": 0,
+    "stdout": "/etc/sudoers:ALL ALL=(ALL) NOPASSWD:ALL\n",
+    "stderr": "",
+    "status": "ok"
+  }
+]
