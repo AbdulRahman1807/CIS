@@ -102,9 +102,16 @@ defined once so A and B never guess at each other's shape.
   "exit_code": 0,
   "stdout": "permitrootlogin yes\n...",
   "stderr": "",
-  "status": "ok"
+  "status": "ok",
+  "reason": null
 }
 ```
+
+`reason` is `null` when `status == "ok"`; when `status == "unavailable"` it's a
+short string from `classify()` (`"binary not found in container"`,
+`"permission denied"`, `"timed out"`) — this is what Requirement 7's "skipped
+with a logged reason" actually points at, so rules.py never has to re-parse
+stderr to explain an UNKNOWN.
 
 `status` is one of exactly two values, decided by `collector.classify()`
 (full spec in §4 Person A — do not reimplement this logic ad hoc elsewhere):
@@ -168,16 +175,16 @@ there is nothing to reconcile later.
 
 | rule_id | title | command_id | argv | PASS condition | severity |
 |---|---|---|---|---|---|
-| CIS-5.2.10 | SSH root login disabled | `cmd_sshd_config` | `["sshd","-T"]` | no line matches `permitrootlogin\s+yes` | high |
+| CIS-5.2.10 | SSH root login disabled | `cmd_sshd_config` | `["grep","-iE","^(PermitRootLogin\|PasswordAuthentication)","/etc/ssh/sshd_config"]`² | no line matches `permitrootlogin\s+yes` | high |
 | CIS-5.2.11 | SSH password auth disabled | `cmd_sshd_config` (reuse) | same capture | no line matches `passwordauthentication\s+yes` | high |
-| CIS-5.3.1 | Minimum password length ≥14 | `cmd_login_defs` | `["cat","/etc/login.defs"]` | `PASS_MIN_LEN` present and ≥ 14 | medium |
+| CIS-5.3.1 | Minimum password length ≥14 | `cmd_login_defs` | `["cat","/etc/login.defs"]` | `PASS_MIN_LEN` present and ≥ 14 | medium |⁴
 | CIS-6.1.2 | `/etc/passwd` ownership/perms | `cmd_stat_passwd` | `["stat","-c","%U:%G %a","/etc/passwd"]` | owner `root:root`, mode `644` | medium |
 | CIS-6.1.3 | `/etc/shadow` ownership/perms | `cmd_stat_shadow` | `["stat","-c","%U:%G %a","/etc/shadow"]` | owner `root:*`, mode ∈ `{640,600,000}` | high |
 | CIS-6.1.10 | No world-writable files in `/etc`, `/usr/bin`, `/usr/sbin` | `cmd_world_writable` | `["find","/etc","/usr/bin","/usr/sbin","-xdev","-type","f","-perm","-0002"]` | empty stdout | medium |
 | CIS-3.5.1 | Firewall active | `cmd_firewall` | `["iptables","-L","INPUT","-n"]` | policy is not `ACCEPT` **or** at least one DROP/REJECT rule present | high |¹
 | CIS-2.2.4 | Automatic security updates enabled | `cmd_auto_updates` | `["cat","/etc/apt/apt.conf.d/20auto-upgrades"]` | contains `Unattended-Upgrade "1"` | medium |
 | CIS-5.4.1 | No accounts with empty passwords | `cmd_empty_passwd` | `["awk","-F:","($2==\"\"){print $1}","/etc/shadow"]` | empty stdout | critical |
-| CIS-5.2.9 | No blanket `NOPASSWD:ALL` in sudoers | `cmd_sudoers` | `["grep","-r","NOPASSWD","/etc/sudoers","/etc/sudoers.d"]` | no match (grep exit 1) | high |
+| CIS-5.2.9 | No blanket `NOPASSWD:ALL` in sudoers | `cmd_sudoers` | `["grep","-r","NOPASSWD","/etc/sudoers","/etc/sudoers.d"]`³ | no match (grep exit 1) | high |
 
 That's 10. ¹ `iptables -L` needs `--cap-add=NET_ADMIN` on `docker run` to
 read the kernel's netfilter rule table at all — but that alone is **not**
@@ -207,6 +214,37 @@ updates not configured"), not UNKNOWN. UNKNOWN is reserved for cases where
 the command genuinely couldn't be run or its output genuinely couldn't be
 read — missing binary, permission denied, timeout — see §4's `classify()`
 spec and §6.
+
+² The handout's own Part 4 example uses `sshd -T | grep -i permitrootlogin`.
+Tested live and dropped it: `sshd -T` needs to read the private host key
+files (`/etc/ssh/ssh_host_*_key`, mode `600 root:root`) even just to
+validate config, and fails with `sshd: no hostkeys available -- exiting`
+for a non-root `audituser` — confirmed against `cis-clean`. Reading
+`sshd_config` directly with `grep` gives the identical evidence
+(`PermitRootLogin no` / `yes`) without needing any elevated read access, and
+the config file is `644` (world-readable) by default. This is a genuine
+improvement on the handout's example for a least-privilege audit user, not a
+shortcut — say so plainly in REPORT.md §3 Methods.
+
+³ `/etc/sudoers` and every file under `/etc/sudoers.d/` are `0440 root:root`
+by default — also unreadable by a non-root `audituser`, tested live and
+confirmed ("Permission denied" on all three targets, including
+misconfigured, where the planted NOPASSWD finding would otherwise never be
+seen). Fixed the same way as `/etc/shadow`: a dedicated group (`cisaudit`)
+with group-read on exactly those files, `audituser` added to it on the
+clean and misconfigured images only — **not** on `cis-broken`, so CIS-5.2.9
+UNKNOWNs there too, consistent with the rest of that image's story. Baked
+into `targets/Dockerfile.clean` / `Dockerfile.misconfigured`, verified live:
+`docker exec -u audituser cis-misconfigured grep -r NOPASSWD /etc/sudoers /etc/sudoers.d`
+now returns the planted `ALL ALL=(ALL) NOPASSWD:ALL` line with exit 0.
+
+⁴ Ubuntu 22.04's stock `/etc/login.defs` ships `PASS_MIN_LEN` commented out
+under an "OBSOLETED BY PAM" section. A `sed` targeting an "active" line is a
+silent no-op against it — caught live (the clean image's "hardening" wasn't
+actually landing, both targets showed the same commented-out line). Fixed by
+appending a fresh line instead of substituting; both target Dockerfiles do
+this now. If B's parser assumes the line is always present and active,
+that assumption is safe — the fixture and both live images guarantee it.
 
 If time remains after 2:15, widen this list — not before.
 

@@ -14,8 +14,9 @@ RUN setcap cap_net_admin,cap_net_raw+ep "$(readlink -f "$(command -v iptables)")
 RUN sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
-# --- CIS-5.3.1: weak password policy ---
-RUN sed -i 's/^PASS_MIN_LEN.*/PASS_MIN_LEN\t5/' /etc/login.defs
+# --- CIS-5.3.1: weak password policy. See Dockerfile.clean — sed against
+#     the commented-out stock line is a no-op on Ubuntu 22.04, append instead. ---
+RUN printf 'PASS_MIN_LEN\t5\n' >> /etc/login.defs
 
 # --- CIS-6.1.10: a world-writable file planted under /etc ---
 RUN touch /etc/cis_test_world_writable && chmod 666 /etc/cis_test_world_writable
@@ -35,9 +36,17 @@ RUN echo 'ALL ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-cis-test-nopasswd && \
 # correct defaults on purpose — a misconfigured target should not pass
 # every single rule vacuously by being broken in unrelated ways.
 
-# --- least-privilege audit user, in `shadow` group so this target produces
-#     real evidenced FAILs rather than UNKNOWNs (broken target's job) ---
-RUN useradd -m -G shadow -s /bin/bash audituser
+# --- CIS-5.2.9 read path: same fix as Dockerfile.clean, applied AFTER the
+#     planted NOPASSWD file above so it's covered too — otherwise the one
+#     finding this whole image exists to demonstrate is unreadable. ---
+RUN groupadd cisaudit && \
+    chgrp cisaudit /etc/sudoers && chmod g+r /etc/sudoers && \
+    find /etc/sudoers.d -type f -exec chgrp cisaudit {} \; -exec chmod g+r {} \;
+
+# --- least-privilege audit user, in `shadow`+`cisaudit` groups so this
+#     target produces real evidenced FAILs rather than UNKNOWNs (that's
+#     Dockerfile.broken's job — it joins neither group) ---
+RUN useradd -m -G shadow,cisaudit -s /bin/bash audituser
 
 COPY entrypoint-misconfigured.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
